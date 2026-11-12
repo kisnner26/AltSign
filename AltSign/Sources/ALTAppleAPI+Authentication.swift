@@ -409,6 +409,8 @@ private extension ALTAppleAPI
         let requestURL = URL(string: "https://gsa.apple.com/auth/verify/phone")!
         let verifyURL = URL(string: "https://gsa.apple.com/auth/verify/phone/securitycode")!
 
+        let phoneID = 1
+        
         var request = self.makeTwoFactorCodeRequest(url: requestURL, dsid: dsid, idmsToken: idmsToken, anisetteData: anisetteData)
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -417,7 +419,7 @@ private extension ALTAppleAPI
         do
         {
             let bodyJSON = [
-                "phoneNumber": ["id": 1],
+                "phoneNumber": ["id": phoneID],
                 "mode": "sms"
             ] as [String : Any]
             
@@ -433,8 +435,11 @@ private extension ALTAppleAPI
         self.sendGSARequest(request) { (result) in
             do
             {
-                let (_, response) = try result.get()
-                guard (200 ..< 300).contains(response.statusCode) else {
+                let (data, response) = try result.get()
+                
+                // HTTP 412 with an active SMS challenge means a code was already sent, so go on and ask for it.
+                let isCodeAlreadySent = SMSChallenge.isActive(statusCode: response.statusCode, body: data, phoneID: phoneID)
+                guard (200 ..< 300).contains(response.statusCode) || isCodeAlreadySent else {
                     throw ALTAppleAPIError.unknown(statusCode: response.statusCode, failure: NSLocalizedString("Could not request an SMS verification code from Apple.", comment: ""))
                 }
                 
